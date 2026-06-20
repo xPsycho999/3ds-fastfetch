@@ -35,7 +35,7 @@
 #define WHITE  "\x1b[37;1m"
 
 // ---- info rows, built dynamically so failed fields can be skipped ----
-#define MAX_ROWS 28
+#define MAX_ROWS 32
 static char rows[MAX_ROWS][96];
 static int  row_count = 0;
 
@@ -223,6 +223,15 @@ int main(int argc, char **argv) {
         if (R_SUCCEEDED(CFGU_GetSystemLanguage(&lang)) && language_name(lang))
             add_row("Language", "%s", language_name(lang));
 
+        // Birthday set in System Settings (block 0x000A0001: u8 month, u8 day).
+        struct { u8 month; u8 day; } bd = {0};
+        if (R_SUCCEEDED(CFGU_GetConfigInfoBlk2(sizeof(bd), 0x000A0001, &bd)) &&
+            bd.month >= 1 && bd.month <= 12 && bd.day >= 1 && bd.day <= 31) {
+            static const char *months[] = {"Jan","Feb","Mar","Apr","May","Jun",
+                                           "Jul","Aug","Sep","Oct","Nov","Dec"};
+            add_row("Birthday", "%s %u", months[bd.month - 1], bd.day);
+        }
+
         // Serial number (needs the privileged cfg:i handle, available under CFW).
         // CFGI returns the serial without the trailing check digit, which we
         // recompute so it matches the number printed on the console.
@@ -335,6 +344,25 @@ int main(int argc, char **argv) {
             strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", lt);
             add_row("Time", "%s", buf);
         }
+    }
+
+    // --- neofetch-style palette: two rows of 8 color swatches (purely visual,
+    //     not console data — the console's own VT background colors 40-47 and
+    //     bright 100-107). A blank line separates it from the info above. ---
+    {
+        add_raw("%s", "");
+        char line[96];
+        int n = 0;
+        for (int c = 40; c <= 47; c++)
+            n += snprintf(line + n, sizeof(line) - n, "\x1b[%dm   ", c);
+        snprintf(line + n, sizeof(line) - n, RESET);
+        add_raw("%s", line);
+
+        n = 0;
+        for (int c = 100; c <= 107; c++)
+            n += snprintf(line + n, sizeof(line) - n, "\x1b[%dm   ", c);
+        snprintf(line + n, sizeof(line) - n, RESET);
+        add_raw("%s", line);
     }
 
     // --- render once: model-specific logo on the left, info on the right ---
